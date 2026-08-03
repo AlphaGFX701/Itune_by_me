@@ -104,29 +104,42 @@ function dedupe(tracks: Track[]): Track[] {
   return out;
 }
 
+/**
+ * Combines a caller-supplied abort signal with a timeout into one signal,
+ * using the native `AbortSignal.timeout`/`AbortSignal.any` where available.
+ *
+ * The previous implementation wired this up manually with a second
+ * `AbortController` and a forwarded `addEventListener('abort', ...)` — a
+ * pattern WebKit has documented bugs with, where it can surface as a fetch
+ * rejecting with a generic `TypeError: Load failed` on iOS Safari for
+ * requests that never actually got sent. Letting the platform combine the
+ * signals avoids that custom bookkeeping entirely.
+ */
+function combineSignal(timeoutMs: number, external?: AbortSignal): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!external) return timeoutSignal;
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([external, timeoutSignal]);
+  }
+  // Older engines without AbortSignal.any (pre iOS 17.4 / Chrome 116).
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  external.addEventListener('abort', abort, { once: true });
+  timeoutSignal.addEventListener('abort', abort, { once: true });
+  return controller.signal;
+}
+
 /** One request attempt. Never called directly — see `requestJson` for retry handling. */
 async function requestJsonOnce(
   url: string,
   signal: AbortSignal | undefined,
   timeoutMs: number
 ): Promise<{ results?: unknown }> {
-  const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
-
-  // Forward an externally supplied abort into our timeout controller.
-  const forwardAbort = () => timeoutController.abort();
-  signal?.addEventListener('abort', forwardAbort);
-
-  try {
-    const response = await fetch(url, { signal: timeoutController.signal });
-    if (!response.ok) {
-      throw new ItunesError(`iTunes responded with ${response.status}`);
-    }
-    return (await response.json()) as { results?: unknown };
-  } finally {
-    clearTimeout(timeoutId);
-    signal?.removeEventListener('abort', forwardAbort);
+  const response = await fetch(url, { signal: combineSignal(timeoutMs, signal) });
+  if (!response.ok) {
+    throw new ItunesError(`iTunes responded with ${response.status}`);
   }
+  return (await response.json()) as { results?: unknown };
 }
 
 /**
