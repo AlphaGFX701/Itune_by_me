@@ -104,9 +104,14 @@ function dedupe(tracks: Track[]): Track[] {
   return out;
 }
 
-async function requestJson(url: string, signal?: AbortSignal): Promise<{ results?: unknown }> {
+/** One request attempt. Never called directly — see `requestJson` for retry handling. */
+async function requestJsonOnce(
+  url: string,
+  signal: AbortSignal | undefined,
+  timeoutMs: number
+): Promise<{ results?: unknown }> {
   const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
 
   // Forward an externally supplied abort into our timeout controller.
   const forwardAbort = () => timeoutController.abort();
@@ -118,14 +123,36 @@ async function requestJson(url: string, signal?: AbortSignal): Promise<{ results
       throw new ItunesError(`iTunes responded with ${response.status}`);
     }
     return (await response.json()) as { results?: unknown };
-  } catch (error) {
-    if (signal?.aborted) throw error; // caller cancelled — let it bubble untouched
-    if (error instanceof ItunesError) throw error;
-    throw new ItunesError('Could not reach the iTunes Store. Check your connection.', error);
   } finally {
     clearTimeout(timeoutId);
     signal?.removeEventListener('abort', forwardAbort);
   }
+}
+
+/**
+ * Fetches with one automatic retry. Mobile connections drop single requests
+ * far more often than Wi-Fi — a lone timeout or a mid-request network switch
+ * (e.g. cellular ⇄ Wi-Fi handoff) shouldn't surface as "can't connect".
+ */
+async function requestJson(url: string, signal?: AbortSignal): Promise<{ results?: unknown }> {
+  const attempts = [REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS + 8_000];
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts.length; attempt++) {
+    if (signal?.aborted) throw new ItunesError('Request cancelled');
+    try {
+      return await requestJsonOnce(url, signal, attempts[attempt]);
+    } catch (error) {
+      lastError = error;
+      if (signal?.aborted) throw error; // caller cancelled — let it bubble untouched
+      if (attempt < attempts.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+  }
+
+  if (lastError instanceof ItunesError) throw lastError;
+  throw new ItunesError('Could not reach the iTunes Store. Check your connection.', lastError);
 }
 
 /**
