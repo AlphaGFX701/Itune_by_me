@@ -152,7 +152,16 @@ async function requestJson(url: string, signal?: AbortSignal): Promise<{ results
   }
 
   if (lastError instanceof ItunesError) throw lastError;
-  throw new ItunesError('Could not reach the iTunes Store. Check your connection.', lastError);
+
+  // Surface the raw browser error (e.g. "TypeError: Failed to fetch",
+  // "AbortError") in the message itself — without a remote device to
+  // inspect, this is the only diagnostic signal available for reports like
+  // "search doesn't work on my Android phone".
+  const detail =
+    lastError instanceof Error
+      ? `${lastError.name}: ${lastError.message}`
+      : String(lastError);
+  throw new ItunesError(`Could not reach the iTunes Store. (${detail})`, lastError);
 }
 
 /**

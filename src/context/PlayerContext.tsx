@@ -92,7 +92,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       } else {
         player.replace({ uri: track.previewUrl, name: track.title });
         setIntendsToPlay(autoPlay);
-        if (autoPlay) player.play();
+        // Don't call play() here — replace() loads asynchronously, so an
+        // immediate play() can silently no-op. The effect below starts
+        // playback once the player reports the new source is loaded.
 
         try {
           player.setActiveForLockScreen(true, {
@@ -202,13 +204,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     playNextRef.current();
   }, [status.didJustFinish, currentTrack]);
 
-  // A source swapped in while paused can finish loading after `play()` was
-  // called; re-issue the intent once the player reports it is ready.
+  // Starts playback once a freshly loaded source is ready. Deliberately
+  // ignores `didJustFinish` — that flag can still read `true` from the
+  // *previous* track for a tick after `replace()` swaps in a new one, which
+  // previously blocked this effect from ever starting the next song.
   useEffect(() => {
-    if (intendsToPlay && status.isLoaded && !status.playing && !status.didJustFinish) {
+    if (intendsToPlay && status.isLoaded && !status.playing) {
       player.play();
     }
-  }, [intendsToPlay, status.isLoaded, status.playing, status.didJustFinish, player]);
+  }, [intendsToPlay, status.isLoaded, status.playing, player]);
 
   const value = useMemo<PlayerContextValue>(
     () => ({
