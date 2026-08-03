@@ -11,7 +11,10 @@
     "primaryColor": "#1DB954",
     "extra": {
       "author": "Thanadon Jaimuang",
-      "institution": "KMUTNB · Computer Education (CED)"
+      "institution": "KMUTNB · Computer Education (CED)",
+      "router": {
+        "origin": false
+      }
     },
     "ios": {
       "icon": "./assets/expo.icon",
@@ -31,7 +34,8 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "baseUrl": "/Itune_by_me/"
     },
     "plugins": [
       "expo-router",
