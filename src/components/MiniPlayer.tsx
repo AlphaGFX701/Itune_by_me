@@ -63,40 +63,50 @@ export function MiniPlayer({ bottom }: { bottom: number }) {
     <Animated.View
       pointerEvents={visible ? 'auto' : 'none'}
       style={[styles.wrapper, { bottom }, containerStyle]}>
-      <Pressable
-        onPress={() =>
-          currentTrack &&
-          router.push({ pathname: '/preview', params: trackToParams(currentTrack) })
-        }
-        accessibilityRole="button"
-        accessibilityLabel={
-          currentTrack ? `Open now playing: ${currentTrack.title}` : 'Now playing'
-        }
-        style={styles.card}>
+      {/*
+        The whole bar used to be one Pressable wrapping the like/play/next
+        buttons — on web, Pressable renders a <button>, so that nested a
+        <button> inside a <button>, which is invalid HTML (React warns,
+        and taps on the inner buttons could bubble oddly). Only the
+        art+text region opens Now Playing now; the controls are sibling
+        Pressables in the same row.
+      */}
+      <View style={styles.card}>
         <BlurView intensity={38} tint="dark" style={StyleSheet.absoluteFill} />
         <View style={styles.tint} />
 
         <View style={styles.content}>
-          <View style={styles.art}>
-            {!!currentTrack && (
-              <Image
-                source={currentTrack.coverUrl}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-                transition={200}
-                cachePolicy="memory-disk"
-              />
-            )}
-          </View>
+          <Pressable
+            onPress={() =>
+              currentTrack &&
+              router.push({ pathname: '/preview', params: trackToParams(currentTrack) })
+            }
+            accessibilityRole="button"
+            accessibilityLabel={
+              currentTrack ? `Open now playing: ${currentTrack.title}` : 'Now playing'
+            }
+            style={styles.infoTap}>
+            <View style={styles.art}>
+              {!!currentTrack && (
+                <Image
+                  source={currentTrack.coverUrl}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  transition={200}
+                  cachePolicy="memory-disk"
+                />
+              )}
+            </View>
 
-          <View style={styles.text}>
-            <Text style={styles.title} numberOfLines={1}>
-              {currentTrack?.title ?? ''}
-            </Text>
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {isVideoTrack ? 'Music video · tap to watch' : currentTrack?.artist ?? ''}
-            </Text>
-          </View>
+            <View style={styles.text}>
+              <Text style={styles.title} numberOfLines={1}>
+                {currentTrack?.title ?? ''}
+              </Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {isVideoTrack ? 'Music video · tap to watch' : currentTrack?.artist ?? ''}
+              </Text>
+            </View>
+          </Pressable>
 
           {!!currentTrack && <LikeButton track={currentTrack} size={20} />}
 
@@ -136,7 +146,7 @@ export function MiniPlayer({ bottom }: { bottom: number }) {
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
         </View>
-      </Pressable>
+      </View>
     </Animated.View>
   );
 }
@@ -170,6 +180,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     paddingHorizontal: Spacing.md,
+  },
+  infoTap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    minWidth: 0,
   },
   art: {
     width: 42,
